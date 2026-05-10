@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+.superpowers/
+*.tsbuildinfo
+.vite-dev.*
+dev-verification.png
+styled-verification.png
+vite.config.js
+vite.config.d.ts
