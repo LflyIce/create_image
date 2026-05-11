@@ -49,6 +49,53 @@ function doubaoImageProxy(apiKey?: string): Plugin {
   };
 }
 
+function irisImageProxy(apiKey?: string): Plugin {
+  return {
+    name: "iris-image-proxy",
+    configureServer(server) {
+      server.middlewares.use("/api/iris/images/generations", async (request, response) => {
+        const method = String(request.method || "GET").toUpperCase();
+        if (!["GET", "POST"].includes(method)) {
+          response.statusCode = 405;
+          response.setHeader("Content-Type", "application/json");
+          response.end(JSON.stringify({ error: "Method not allowed" }));
+          return;
+        }
+
+        if (!apiKey) {
+          response.statusCode = 200;
+          response.setHeader("Content-Type", "application/json");
+          response.end(JSON.stringify({ error: "未配置 IRIS_API_KEY，无法调用 Iris Design API" }));
+          return;
+        }
+
+        try {
+          const suffix = request.url?.replace(/^\/?/, "") || "";
+          const targetUrl = `https://api.iris-designs.com/v1/images/generations${suffix ? `/${suffix}` : ""}`;
+          const body = method === "POST" ? await readRequestBody(request) : undefined;
+          const irisResponse = await fetch(targetUrl, {
+            method,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`
+            },
+            body
+          });
+
+          const text = await irisResponse.text();
+          response.statusCode = irisResponse.status;
+          response.setHeader("Content-Type", irisResponse.headers.get("Content-Type") ?? "application/json");
+          response.end(text);
+        } catch (error) {
+          response.statusCode = 500;
+          response.setHeader("Content-Type", "application/json");
+          response.end(JSON.stringify({ error: error instanceof Error ? error.message : "Iris 代理请求失败" }));
+        }
+      });
+    }
+  };
+}
+
 function readRequestBody(request: IncomingMessage) {
   return new Promise<string>((resolve, reject) => {
     let body = "";
@@ -66,7 +113,11 @@ export default defineConfig(({ mode }) => {
   const localEnv = readLocalEnv(process.cwd());
 
   return {
-    plugins: [react(), doubaoImageProxy(env.ARK_API_KEY || localEnv.ARK_API_KEY || process.env.ARK_API_KEY)],
+    plugins: [
+      react(),
+      doubaoImageProxy(env.ARK_API_KEY || localEnv.ARK_API_KEY || process.env.ARK_API_KEY),
+      irisImageProxy(env.IRIS_API_KEY || localEnv.IRIS_API_KEY || process.env.IRIS_API_KEY)
+    ],
     test: {
       environment: "jsdom",
       setupFiles: "./src/test/setup.ts",

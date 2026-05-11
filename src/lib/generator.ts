@@ -1,18 +1,54 @@
 export type ImageSize = "1:1" | "4:3" | "3:4" | "16:9";
 
 export type DoubaoModel = "doubao-seedream-4-0-250828" | "doubao-seedream-5-0-260128";
+export type IrisModel =
+  | "nano-banana-pro"
+  | "nano-banana-2"
+  | "nano-banana-pro__vip"
+  | "nano-banana-2__vip"
+  | "gpt-image-2"
+  | "gpt-image-2-vip"
+  | "gpt-image-2__vip"
+  | "grok-imagine/text-to-image"
+  | "grok-imagine/image-to-image"
+  | "seedream/5-lite-text-to-image"
+  | "seedream/5-lite-image-to-image";
+export type ImageModel = DoubaoModel | IrisModel;
 
-export const DOUBAO_MODEL_OPTIONS: { value: DoubaoModel; label: string }[] = [
-  { value: "doubao-seedream-5-0-260128", label: "Seedream 5.0 Lite" },
-  { value: "doubao-seedream-4-0-250828", label: "Seedream 4.0" }
+export const IMAGE_MODEL_OPTIONS: { value: ImageModel; label: string }[] = [
+  { value: "doubao-seedream-5-0-260128", label: "Doubao Seedream 5.0 Lite" },
+  { value: "doubao-seedream-4-0-250828", label: "Doubao Seedream 4.0" },
+  { value: "nano-banana-2", label: "Iris Nano Banana 2" },
+  { value: "nano-banana-pro", label: "Iris Nano Banana Pro" },
+  { value: "nano-banana-2__vip", label: "Iris Nano Banana 2 VIP" },
+  { value: "nano-banana-pro__vip", label: "Iris Nano Banana Pro VIP" },
+  { value: "gpt-image-2", label: "Iris GPT Image 2" },
+  { value: "gpt-image-2-vip", label: "Iris GPT Image 2 VIP" },
+  { value: "gpt-image-2__vip", label: "Iris GPT Image 2 VIP 图生图" },
+  { value: "grok-imagine/text-to-image", label: "Iris Grok 文生图" },
+  { value: "grok-imagine/image-to-image", label: "Iris Grok 图生图" },
+  { value: "seedream/5-lite-text-to-image", label: "Iris Seedream 文生图" },
+  { value: "seedream/5-lite-image-to-image", label: "Iris Seedream 图生图" }
 ];
+
+export const DOUBAO_MODEL_OPTIONS = IMAGE_MODEL_OPTIONS.filter((option) =>
+  option.value.startsWith("doubao-")
+) as { value: DoubaoModel; label: string }[];
+
+export function isDoubaoModel(model: ImageModel): model is DoubaoModel {
+  return model.startsWith("doubao-");
+}
+
+export function isIrisModel(model: ImageModel): model is IrisModel {
+  return !isDoubaoModel(model);
+}
 
 export type GenerationRequest = {
   prompt: string;
   size: ImageSize;
   count: number;
   sampleImageUrl: string;
-  model?: DoubaoModel;
+  model?: ImageModel;
 };
 
 export type GenerationPair = {

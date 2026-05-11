@@ -45,10 +45,13 @@ import {
   DirectPasteResult,
   GenerationPair,
   ImageSize,
-  DoubaoModel,
-  DOUBAO_MODEL_OPTIONS
+  ImageModel,
+  IMAGE_MODEL_OPTIONS,
+  isDoubaoModel,
+  isIrisModel
 } from "./lib/generator";
 import { createDoubaoDirectPaste, createDoubaoGenerationBatch } from "./lib/doubao";
+import { createIrisDirectPaste, createIrisGenerationBatch } from "./lib/iris";
 import "./App.css";
 
 const { Text, Title } = Typography;
@@ -331,7 +334,7 @@ export default function App() {
   const [sampleImageUrl, setSampleImageUrl] = useState("");
   const [prompt, setPrompt] = useState("");
   const [size, setSize] = useState<ImageSize>("1:1");
-  const [model, setModel] = useState<DoubaoModel>("doubao-seedream-5-0-260128");
+  const [model, setModel] = useState<ImageModel>("doubao-seedream-5-0-260128");
   const [count, setCount] = useState(4);
   const [isGenerating, setIsGenerating] = useState(false);
   const [results, setResults] = useState<GenerationPair[]>([]);
@@ -418,7 +421,9 @@ export default function App() {
     }
     setIsGenerating(true); setResults([]);
     try {
-      const batch = await createDoubaoGenerationBatch({ prompt: prompt.trim(), size, count, sampleImageUrl, model });
+      const batch = isIrisModel(model)
+        ? await createIrisGenerationBatch({ prompt: prompt.trim(), size, count, sampleImageUrl, model })
+        : await createDoubaoGenerationBatch({ prompt: prompt.trim(), size, count, sampleImageUrl, model });
       setResults(batch);
     } catch (generationError) {
       await new Promise((resolve) => setTimeout(resolve, 450));
@@ -463,7 +468,9 @@ export default function App() {
 
     setIsPasting(true);
     try {
-      const result = await createDoubaoDirectPaste(pasteProductImageUrl, pastePatternImageUrl, model);
+      const result = isIrisModel(model)
+        ? await createIrisDirectPaste(pasteProductImageUrl, pastePatternImageUrl, model)
+        : await createDoubaoDirectPaste(pasteProductImageUrl, pastePatternImageUrl, isDoubaoModel(model) ? model : "doubao-seedream-5-0-260128");
       setPasteResult(result);
     } catch (generationError) {
       await new Promise((resolve) => setTimeout(resolve, 360));
@@ -580,7 +587,7 @@ export default function App() {
               </div>
 
               <Space orientation="vertical" size={12} className="form-stack">
-                <div className="field"><span>生成模型</span><Select aria-label="直接贴图生成模型" value={model} onChange={(v) => setModel(v)} options={DOUBAO_MODEL_OPTIONS} /></div>
+                <div className="field"><span>生成模型</span><Select aria-label="直接贴图生成模型" value={model} onChange={(v) => setModel(v)} options={IMAGE_MODEL_OPTIONS} /></div>
                 {pasteError ? <Alert type="error" title={pasteError} showIcon closable onClose={() => setPasteError("")} /> : null}
                 {pasteNotice ? <Alert type="warning" title={pasteNotice} showIcon closable onClose={() => setPasteNotice("")} /> : null}
                 <Button block className="generate-button" disabled={!canDirectPaste} icon={<PictureOutlined />} loading={isPasting} onClick={handleDirectPaste} type="primary">
@@ -618,7 +625,7 @@ export default function App() {
                   <TextArea aria-label="提示词" value={prompt} onChange={(e) => setPrompt(e.target.value)}
                     placeholder="例如：这是一个门帘产品图，生成在阳光下绽放的茉莉花图片，蓝色的天空，白色的云" rows={5} showCount maxLength={180} />
                 </label>
-                <div className="field"><span>生成模型</span><Select aria-label="生成模型" value={model} onChange={(v) => setModel(v)} options={DOUBAO_MODEL_OPTIONS} /></div>
+                <div className="field"><span>生成模型</span><Select aria-label="生成模型" value={model} onChange={(v) => setModel(v)} options={IMAGE_MODEL_OPTIONS} /></div>
                 <div className="field"><span>图片规格</span><Segmented<ImageSize> block options={imageSizes} value={size} onChange={(v) => setSize(v)} /></div>
                 <label className="field"><span>生成数量</span>
                   <Select aria-label="生成数量" value={count} onChange={(v) => setCount(v)}

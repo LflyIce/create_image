@@ -1,4 +1,4 @@
-import { DirectPasteResult, GenerationPair, GenerationRequest, ImageSize, DoubaoModel } from "./generator";
+import { DirectPasteResult, DoubaoModel, GenerationPair, GenerationRequest, ImageSize, isDoubaoModel } from "./generator";
 
 export type DoubaoPurpose = "style" | "product";
 
@@ -143,7 +143,7 @@ export async function generateDoubaoImage(prompt: string, model: DoubaoModel, fe
 }
 
 export async function createDoubaoGenerationBatch(request: GenerationRequest, fetcher: FetchLike = fetch) {
-  const model = request.model || "doubao-seedream-5-0-260128";
+  const model = request.model && isDoubaoModel(request.model) ? request.model : "doubao-seedream-5-0-260128";
   const pairs: GenerationPair[] = [];
 
   for (let index = 0; index < request.count; index += 1) {
