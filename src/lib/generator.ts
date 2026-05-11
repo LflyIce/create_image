@@ -1,10 +1,18 @@
 export type ImageSize = "1:1" | "4:3" | "3:4" | "16:9";
 
+export type DoubaoModel = "doubao-seedream-4-0-250828" | "doubao-seedream-5-0-260128";
+
+export const DOUBAO_MODEL_OPTIONS: { value: DoubaoModel; label: string }[] = [
+  { value: "doubao-seedream-5-0-260128", label: "Seedream 5.0 Lite" },
+  { value: "doubao-seedream-4-0-250828", label: "Seedream 4.0" }
+];
+
 export type GenerationRequest = {
   prompt: string;
   size: ImageSize;
   count: number;
   sampleImageUrl: string;
+  model?: DoubaoModel;
 };
 
 export type GenerationPair = {

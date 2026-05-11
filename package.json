@@ -11,6 +11,7 @@
   "dependencies": {
     "@ant-design/icons": "^6.2.2",
     "antd": "^6.3.7",
+    "better-sqlite3": "^12.9.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -10,3 +10,16 @@ dev-verification.png
 styled-verification.png
 vite.config.js
 vite.config.d.ts
+
+# Database & runtime
+*.db
+*.db-shm
+*.db-wal
+
+# Generated images
+__pycache__/
+*.png
+!public/**
+
+# Server
+server.cjs

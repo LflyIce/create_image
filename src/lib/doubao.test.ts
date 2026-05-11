@@ -9,7 +9,7 @@ import {
 
 describe("doubao image generation", () => {
   it("builds the Seedream 4.0 request body from the provided example", () => {
-    expect(buildDoubaoRequestBody("黑白蟾皮纹理")).toEqual({
+    expect(buildDoubaoRequestBody("黑白蟾皮纹理", "doubao-seedream-4-0-250828")).toEqual({
       model: "doubao-seedream-4-0-250828",
       prompt: "黑白蟾皮纹理",
       sequential_image_generation: "disabled",
@@ -31,16 +31,15 @@ describe("doubao image generation", () => {
     const prompt = buildDoubaoPrompt("这是一个门帘的产品图，帮我生成皮卡丘图片更换产品图", "style", "1:1");
 
     expect(prompt).toContain("皮卡丘");
-    expect(prompt).toContain("只生成可用于替换的平面图片内容");
-    expect(prompt).toContain("不要生成门帘");
+    expect(prompt).toContain("纯平面的图案素材");
+    expect(prompt).toContain("绝对不要生成任何产品");
     expect(prompt).toContain("不要生成装饰画");
-    expect(prompt).toContain("图案必须铺满整个画布");
-    expect(prompt).toContain("参考上传产品图中的可替换区域外形");
+    expect(prompt).toContain("不要留白");
     expect(prompt).not.toContain("这是一个门帘的产品图");
   });
 
   it("adds reference images to image editing requests", () => {
-    expect(buildDoubaoRequestBody("把图案贴到门帘上", ["data:image/png;base64,sample", "https://example.com/style.png"])).toMatchObject({
+    expect(buildDoubaoRequestBody("把图案贴到门帘上", "doubao-seedream-5-0-260128", ["data:image/png;base64,sample", "https://example.com/style.png"])).toMatchObject({
       image: ["data:image/png;base64,sample", "https://example.com/style.png"]
     });
   });
