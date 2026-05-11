@@ -1,4 +1,4 @@
-import { GenerationPair, GenerationRequest, ImageSize, DoubaoModel } from "./generator";
+import { DirectPasteResult, GenerationPair, GenerationRequest, ImageSize, DoubaoModel } from "./generator";
 
 export type DoubaoPurpose = "style" | "product";
 
@@ -46,6 +46,10 @@ export function buildDoubaoPrompt(prompt: string, purpose: DoubaoPurpose, size: 
   return `基于两张参考图生成产品替换图。第一张参考图是上传的产品图片，必须保持第一张参考图的场景、构图、背景、光线、相机角度和产品位置不变。第二张参考图是已经生成好的目标图案。只替换上传图片中的产品主体或产品表面贴图为第二张参考图的图案内容，保持第二张参考图的图案主体、颜色、构图和细节一致，不要重新设计图案，不要改变场景，不要添加新物体。${DEFAULT_IMAGE_QUALITY_PROMPT}，${aspect}，用户原始提示词：${prompt}`;
 }
 
+export function buildDirectPastePrompt() {
+  return `基于两张参考图生成产品贴图结果。第一张参考图是产品原图，必须严格保持产品原图的场景、构图、背景、光线、相机角度、产品轮廓、安装环境和产品位置不变。第二张参考图是需要贴到产品主体或产品表面的图案。请只把第二张图的图案内容贴合到第一张图中的主要产品表面，让图案服从原产品表面的透视、褶皱、凹凸、阴影和高光。不要改变产品外形，不要添加新物体，不要生成相框、海报、纸张、画布、边框或额外装饰，不要把图案做成悬浮贴纸。输出一张真实自然的产品贴图成品图。${DEFAULT_IMAGE_QUALITY_PROMPT}`;
+}
+
 export function extractReplacementSubject(prompt: string) {
   const normalized = prompt.trim();
   const patterns = [
@@ -72,6 +76,44 @@ export function extractDoubaoImageUrl(payload: unknown) {
   return data?.[0]?.url ?? "";
 }
 
+function localizeDoubaoError(code: string, message: string) {
+  const combined = `${code} ${message}`;
+
+  if (/InputImageSensitiveContentDetected|sensitive/i.test(combined)) {
+    return "上传的图片可能包含敏感内容，平台已拒绝处理。请更换为普通产品图、纹理图或插画后重试。";
+  }
+  if (/InvalidParameter|invalid/i.test(combined)) {
+    return "请求参数或图片格式不符合平台要求。请换一张清晰的 JPG/PNG 图片后重试。";
+  }
+  if (/Unauthorized|Authentication|auth|api key|permission/i.test(combined)) {
+    return "接口鉴权失败，请检查 ARK_API_KEY 是否正确配置并已重启服务。";
+  }
+  if (/quota|balance|insufficient|limit/i.test(combined)) {
+    return "接口额度不足或调用频率受限，请检查火山 Ark 额度后稍后再试。";
+  }
+  if (/timeout|network|ECONN|fetch/i.test(combined)) {
+    return "网络请求失败或超时，请稍后重试。";
+  }
+
+  return message || code;
+}
+
+export function extractDoubaoErrorMessage(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const error = (payload as { error?: unknown }).error;
+
+  if (typeof error === "string") return localizeDoubaoError(error, error);
+  if (error && typeof error === "object") {
+    const detail = error as { message?: unknown; msg?: unknown; code?: unknown };
+    const message = typeof detail.message === "string" ? detail.message : typeof detail.msg === "string" ? detail.msg : "";
+    const code = typeof detail.code === "string" || typeof detail.code === "number" ? String(detail.code) : "";
+    return localizeDoubaoError(code, message);
+  }
+
+  const message = (payload as { message?: unknown; msg?: unknown }).message ?? (payload as { msg?: unknown }).msg;
+  return typeof message === "string" ? localizeDoubaoError(message, message) : "";
+}
+
 export async function generateDoubaoImage(prompt: string, model: DoubaoModel, fetcher: FetchLike = fetch, image?: string | string[]) {
   const response = await fetcher("/api/doubao/images", {
     method: "POST",
@@ -83,12 +125,13 @@ export async function generateDoubaoImage(prompt: string, model: DoubaoModel, fe
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = typeof payload?.error === "string" ? payload.error : "Doubao 图片生成失败";
+    const message = extractDoubaoErrorMessage(payload) || "Doubao 图片生成失败";
     throw new Error(message);
   }
 
-  if (typeof payload?.error === "string") {
-    throw new Error(payload.error);
+  const errorMessage = extractDoubaoErrorMessage(payload);
+  if (errorMessage) {
+    throw new Error(errorMessage);
   }
 
   const url = extractDoubaoImageUrl(payload);
@@ -128,4 +171,26 @@ export async function createDoubaoGenerationBatch(request: GenerationRequest, fe
   }
 
   return pairs;
+}
+
+export async function createDoubaoDirectPaste(
+  productImageUrl: string,
+  patternImageUrl: string,
+  model: DoubaoModel = "doubao-seedream-5-0-260128",
+  fetcher: FetchLike = fetch
+): Promise<DirectPasteResult> {
+  const imageUrl = await generateDoubaoImage(
+    buildDirectPastePrompt(),
+    model,
+    fetcher,
+    [productImageUrl, patternImageUrl]
+  );
+
+  return {
+    id: "doubao-direct-paste",
+    title: "贴图产品图",
+    imageUrl,
+    productImageUrl,
+    patternImageUrl
+  };
 }

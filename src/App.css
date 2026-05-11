@@ -198,9 +198,50 @@ body {
 }
 
 .account-panel .ant-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   height: 36px;
   font-size: 13px;
+  font-weight: 510;
   border-radius: var(--r-sm);
+}
+
+.account-action.ant-btn {
+  border-color: var(--border-standard) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text-secondary) !important;
+  box-shadow: none !important;
+}
+
+.account-action.ant-btn:hover {
+  border-color: var(--border-strong) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: var(--text-primary) !important;
+}
+
+.account-buy.ant-btn {
+  margin-bottom: 8px;
+}
+
+.account-buy .anticon {
+  color: var(--text-tertiary);
+}
+
+.account-logout.ant-btn {
+  border-color: rgba(255, 77, 79, 0.5) !important;
+  color: #ff6b6f !important;
+}
+
+.account-logout.ant-btn:hover {
+  border-color: rgba(255, 77, 79, 0.78) !important;
+  background: rgba(255, 77, 79, 0.1) !important;
+  color: #ff8588 !important;
+}
+
+.account-logout .anticon {
+  color: currentColor;
 }
 
 .account-title {
@@ -315,6 +356,38 @@ body {
 }
 
 /* ── Workbench Grid ────────────────────── */
+.workspace-tabs.ant-tabs {
+  margin-top: 4px;
+}
+
+.workspace-tabs > .ant-tabs-nav {
+  margin: 0 0 14px;
+}
+
+.workspace-tabs > .ant-tabs-nav::before {
+  border-bottom-color: var(--border-subtle);
+}
+
+.workspace-tabs .ant-tabs-tab {
+  padding: 10px 2px 12px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: 510;
+}
+
+.workspace-tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 24px;
+}
+
+.workspace-tabs .ant-tabs-tab-active .ant-tabs-tab-btn,
+.workspace-tabs .ant-tabs-tab:hover {
+  color: var(--brand) !important;
+}
+
+.workspace-tabs .ant-tabs-content-holder {
+  min-width: 0;
+}
+
 .workbench {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr) minmax(0, 1fr);
@@ -322,8 +395,17 @@ body {
   align-items: stretch;
 }
 
+.paste-module {
+  display: grid;
+  grid-template-columns: 520px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
 /* ── Panel Cards ───────────────────────── */
 .control-panel.ant-card,
+.paste-control-panel.ant-card,
 .result-column.ant-card {
   position: relative;
   min-height: calc(100vh - 160px);
@@ -334,7 +416,13 @@ body {
   overflow: hidden;
 }
 
+.paste-control-panel.ant-card,
+.paste-module .result-column.ant-card {
+  min-height: 430px;
+}
+
 .control-panel > .ant-card-body,
+.paste-control-panel > .ant-card-body,
 .result-column > .ant-card-body {
   position: relative;
   padding: 18px;
@@ -417,6 +505,18 @@ body {
   object-fit: cover;
 }
 
+.paste-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.paste-upload-box {
+  aspect-ratio: 1 / 0.82;
+  margin-bottom: 0;
+}
+
 /* ── Form Fields ───────────────────────── */
 .form-stack { width: 100%; }
 
@@ -437,7 +537,8 @@ body {
 /* ── Inputs & Controls ─────────────────── */
 .control-panel .ant-input,
 .control-panel .ant-select-selector,
-.control-panel .ant-segmented {
+.control-panel .ant-segmented,
+.paste-control-panel .ant-select-selector {
   border-color: var(--border-standard) !important;
   background: var(--bg-input) !important;
   color: var(--text-primary) !important;
@@ -462,8 +563,13 @@ body {
   color: var(--text-primary) !important;
 }
 
-.control-panel .ant-select-arrow {
+.control-panel .ant-select-arrow,
+.paste-control-panel .ant-select-arrow {
   color: var(--text-quaternary);
+}
+
+.paste-control-panel .ant-select-selection-item {
+  color: var(--text-primary) !important;
 }
 
 .control-panel .ant-segmented {
@@ -1019,6 +1125,7 @@ body {
 @media (max-width: 1120px) {
   .workbench { grid-template-columns: 300px 1fr; }
   .control-panel { grid-row: span 2; }
+  .paste-module { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -1026,13 +1133,14 @@ body {
     width: min(100% - 24px, 720px);
     padding: 18px 0;
   }
-  .topbar, .workbench {
+  .topbar, .workbench, .paste-module {
     display: grid;
     grid-template-columns: 1fr;
   }
   .topbar { align-items: start; }
   .topbar h1.ant-typography { font-size: 28px; letter-spacing: -0.616px; }
-  .control-panel.ant-card, .result-column.ant-card { min-height: auto; }
+  .control-panel.ant-card, .paste-control-panel.ant-card, .result-column.ant-card { min-height: auto; }
+  .paste-upload-grid { grid-template-columns: 1fr; }
   .result-grid { grid-template-columns: 1fr; }
   .result-actions { opacity: 1; }
 }

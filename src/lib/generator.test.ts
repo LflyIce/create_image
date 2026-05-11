@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calculateGenerationCost, createGenerationBatch } from "./generator";
+import {
+  calculateDirectPasteCost,
+  calculateGenerationCost,
+  createDirectPastePreview,
+  createGenerationBatch
+} from "./generator";
 
 describe("generation helpers", () => {
   it("charges one point for each middle image and each product image", () => {
@@ -24,5 +29,19 @@ describe("generation helpers", () => {
     expect(results[0].promptImageUrl).toContain("data:image/svg+xml");
     expect(results[0].productImageUrl).toBe("data:image/png;base64,sample");
     expect(results[0].productOverlayImageUrl).toBe(results[0].promptImageUrl);
+  });
+
+  it("creates a direct paste preview from product and pattern images", () => {
+    const result = createDirectPastePreview("data:image/png;base64,product", "data:image/png;base64,pattern");
+
+    expect(calculateDirectPasteCost()).toBe(1);
+    expect(result).toMatchObject({
+      title: "贴图产品图",
+      productImageUrl: "data:image/png;base64,product",
+      patternImageUrl: "data:image/png;base64,pattern"
+    });
+    expect(result.imageUrl).toContain("data:image/svg+xml");
+    expect(decodeURIComponent(result.imageUrl)).toContain("data:image/png;base64,product");
+    expect(decodeURIComponent(result.imageUrl)).toContain("data:image/png;base64,pattern");
   });
 });

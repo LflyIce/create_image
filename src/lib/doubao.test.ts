@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_IMAGE_QUALITY_PROMPT,
+  buildDirectPastePrompt,
   buildDoubaoPrompt,
   buildDoubaoRequestBody,
+  createDoubaoDirectPaste,
   createDoubaoGenerationBatch,
+  extractDoubaoErrorMessage,
   extractDoubaoImageUrl
 } from "./doubao";
 
@@ -33,7 +36,7 @@ describe("doubao image generation", () => {
     expect(prompt).toContain("皮卡丘");
     expect(prompt).toContain("纯平面的图案素材");
     expect(prompt).toContain("绝对不要生成任何产品");
-    expect(prompt).toContain("不要生成装饰画");
+    expect(prompt).toContain("装饰画");
     expect(prompt).toContain("不要留白");
     expect(prompt).not.toContain("这是一个门帘的产品图");
   });
@@ -48,6 +51,26 @@ describe("doubao image generation", () => {
     expect(extractDoubaoImageUrl({ data: [{ url: "https://example.com/a.png" }] })).toBe(
       "https://example.com/a.png"
     );
+  });
+
+  it("extracts structured Ark error messages", () => {
+    expect(extractDoubaoErrorMessage({ error: { code: "InvalidParameter", message: "image is invalid" } })).toBe(
+      "请求参数或图片格式不符合平台要求。请换一张清晰的 JPG/PNG 图片后重试。"
+    );
+    expect(extractDoubaoErrorMessage({ message: "quota exceeded" })).toBe(
+      "接口额度不足或调用频率受限，请检查火山 Ark 额度后稍后再试。"
+    );
+  });
+
+  it("localizes sensitive input image errors", () => {
+    expect(
+      extractDoubaoErrorMessage({
+        error: {
+          code: "InputImageSensitiveContentDetected",
+          message: "The request failed because the input image may contain sensitive information."
+        }
+      })
+    ).toBe("上传的图片可能包含敏感内容，平台已拒绝处理。请更换为普通产品图、纹理图或插画后重试。");
   });
 
   it("creates product images by editing the uploaded product with the generated style image", async () => {
@@ -82,12 +105,35 @@ describe("doubao image generation", () => {
       }
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
-      image: "data:image/png;base64,sample"
-    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).not.toHaveProperty("image");
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
       image: ["data:image/png;base64,sample", "https://example.com/style.png"]
     });
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).prompt).toContain("只替换上传图片中的产品主体");
+  });
+
+  it("builds and sends direct product paste requests with two uploaded images", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: [{ url: "https://example.com/pasted.png" }] })
+    });
+
+    const result = await createDoubaoDirectPaste(
+      "data:image/png;base64,product",
+      "data:image/png;base64,pattern",
+      "doubao-seedream-5-0-260128",
+      fetchMock
+    );
+
+    expect(result).toMatchObject({
+      title: "贴图产品图",
+      imageUrl: "https://example.com/pasted.png",
+      productImageUrl: "data:image/png;base64,product",
+      patternImageUrl: "data:image/png;base64,pattern"
+    });
+    expect(buildDirectPastePrompt()).toContain("只把第二张图的图案内容贴合到第一张图中的主要产品表面");
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      image: ["data:image/png;base64,product", "data:image/png;base64,pattern"]
+    });
   });
 });

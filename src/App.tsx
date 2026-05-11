@@ -38,14 +38,17 @@ import {
   WalletOutlined
 } from "@ant-design/icons";
 import {
+  calculateDirectPasteCost,
   calculateGenerationCost,
+  createDirectPastePreview,
   createGenerationBatch,
+  DirectPasteResult,
   GenerationPair,
   ImageSize,
   DoubaoModel,
   DOUBAO_MODEL_OPTIONS
 } from "./lib/generator";
-import { createDoubaoGenerationBatch } from "./lib/doubao";
+import { createDoubaoDirectPaste, createDoubaoGenerationBatch } from "./lib/doubao";
 import "./App.css";
 
 const { Text, Title } = Typography;
@@ -56,12 +59,25 @@ const generationCounts = [1, 2, 3, 4, 6];
 
 type UserInfo = { id: number; phone: string; points: number; role: string };
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "https://pod.jiuyueice.cloud").replace(/\/+$/, "");
+const LOCAL_DEV_USER: UserInfo = { id: 0, phone: "13800000000", points: 120, role: "user" };
+
+function shouldBypassAuth() {
+  if (!import.meta.env.DEV || typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function apiUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 function getToken(): string { return localStorage.getItem("pod_token") || ""; }
 function setToken(token: string) { localStorage.setItem("pod_token", token); }
 function clearToken() { localStorage.removeItem("pod_token"); }
 async function api<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     ...options,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options?.headers },
   });
@@ -319,6 +335,12 @@ export default function App() {
   const [count, setCount] = useState(4);
   const [isGenerating, setIsGenerating] = useState(false);
   const [results, setResults] = useState<GenerationPair[]>([]);
+  const [pasteProductImageUrl, setPasteProductImageUrl] = useState("");
+  const [pastePatternImageUrl, setPastePatternImageUrl] = useState("");
+  const [isPasting, setIsPasting] = useState(false);
+  const [pasteResult, setPasteResult] = useState<DirectPasteResult | null>(null);
+  const [pasteError, setPasteError] = useState("");
+  const [pasteNotice, setPasteNotice] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [previewImage, setPreviewImage] = useState<{ title: string; imageUrl: string } | null>(null);
@@ -326,6 +348,12 @@ export default function App() {
   const [pointsExhausted, setPointsExhausted] = useState(false);
 
   useEffect(() => {
+    if (shouldBypassAuth()) {
+      setUser(LOCAL_DEV_USER);
+      setAuthReady(true);
+      return;
+    }
+
     const token = getToken();
     if (!token) { setAuthReady(true); return; }
     api<{ user?: UserInfo; error?: string }>("/api/me")
@@ -336,15 +364,30 @@ export default function App() {
 
   const points = user?.points ?? 0;
   const estimatedCost = useMemo(() => calculateGenerationCost(count), [count]);
+  const directPasteCost = useMemo(() => calculateDirectPasteCost(), []);
   const canGenerate = Boolean(sampleImageUrl && prompt.trim()) && points >= estimatedCost && !isGenerating;
+  const canDirectPaste = Boolean(pasteProductImageUrl && pastePatternImageUrl) && points >= directPasteCost && !isPasting;
 
-  function handleLogout() { clearToken(); setUser(null); setShowAdmin(false); }
-  function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+  function handleLogout() {
+    clearToken();
+    setShowAdmin(false);
+    setUser(shouldBypassAuth() ? LOCAL_DEV_USER : null);
+  }
+  function readUploadedImage(event: ChangeEvent<HTMLInputElement>, onLoad: (imageUrl: string) => void) {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setSampleImageUrl(String(reader.result));
+    reader.onload = () => onLoad(String(reader.result));
     reader.readAsDataURL(file);
+  }
+  function handleUpload(event: ChangeEvent<HTMLInputElement>) {
+    readUploadedImage(event, setSampleImageUrl);
+  }
+  function handlePasteProductUpload(event: ChangeEvent<HTMLInputElement>) {
+    readUploadedImage(event, setPasteProductImageUrl);
+  }
+  function handlePastePatternUpload(event: ChangeEvent<HTMLInputElement>) {
+    readUploadedImage(event, setPastePatternImageUrl);
   }
 
   async function handleGenerate() {
@@ -354,18 +397,25 @@ export default function App() {
       return;
     }
     setError(""); setNotice("");
-    try {
-      const deductResult = await api<{ ok?: boolean; remaining?: number; error?: string }>("/api/points/deduct", { method: "POST", body: JSON.stringify({ amount: estimatedCost }) });
-      if (deductResult.error) {
-        if (deductResult.error.includes("不足")) {
-          setPointsExhausted(true);
-        } else {
-          setError(deductResult.error);
+    if (shouldBypassAuth()) {
+      setUser((current) => current ? { ...current, points: current.points - estimatedCost } : LOCAL_DEV_USER);
+    } else {
+      try {
+        const deductResult = await api<{ ok?: boolean; remaining?: number; error?: string }>("/api/points/deduct", { method: "POST", body: JSON.stringify({ amount: estimatedCost }) });
+        if (deductResult.error) {
+          if (deductResult.error.includes("不足")) {
+            setPointsExhausted(true);
+          } else {
+            setError(deductResult.error);
+          }
+          return;
         }
+        if (user) setUser({ ...user, points: deductResult.remaining ?? 0 });
+      } catch {
+        setError("扣费失败，请重试");
         return;
       }
-      if (user) setUser({ ...user, points: deductResult.remaining ?? 0 });
-    } catch { setError("扣费失败，请重试"); return; }
+    }
     setIsGenerating(true); setResults([]);
     try {
       const batch = await createDoubaoGenerationBatch({ prompt: prompt.trim(), size, count, sampleImageUrl, model });
@@ -376,6 +426,56 @@ export default function App() {
       setResults(batch);
       setNotice(generationError instanceof Error ? `${generationError.message}；已切换为本地模拟生成。` : "Doubao 图片生成失败；已切换为本地模拟生成。");
     } finally { setIsGenerating(false); }
+  }
+
+  async function handleDirectPaste() {
+    if (!pasteProductImageUrl || !pastePatternImageUrl) {
+      setPasteError("请先上传产品图和要贴到产品上的图片。");
+      return;
+    }
+    if (points < directPasteCost) {
+      setPasteError(`点数不足，本次贴图需要 ${directPasteCost} 点。`);
+      return;
+    }
+
+    setPasteError("");
+    setPasteNotice("");
+    setPasteResult(null);
+
+    if (shouldBypassAuth()) {
+      setUser((current) => current ? { ...current, points: current.points - directPasteCost } : LOCAL_DEV_USER);
+    } else {
+      try {
+        const deductResult = await api<{ ok?: boolean; remaining?: number; error?: string }>("/api/points/deduct", {
+          method: "POST",
+          body: JSON.stringify({ amount: directPasteCost })
+        });
+        if (deductResult.error) {
+          setPasteError(deductResult.error);
+          return;
+        }
+        if (user) setUser({ ...user, points: deductResult.remaining ?? 0 });
+      } catch {
+        setPasteError("扣费失败，请重试");
+        return;
+      }
+    }
+
+    setIsPasting(true);
+    try {
+      const result = await createDoubaoDirectPaste(pasteProductImageUrl, pastePatternImageUrl, model);
+      setPasteResult(result);
+    } catch (generationError) {
+      await new Promise((resolve) => setTimeout(resolve, 360));
+      setPasteResult(createDirectPastePreview(pasteProductImageUrl, pastePatternImageUrl));
+      setPasteNotice(
+        generationError instanceof Error
+          ? `${generationError.message}；已切换为本地贴图预览。`
+          : "Doubao 贴图生成失败；已切换为本地贴图预览。"
+      );
+    } finally {
+      setIsPasting(false);
+    }
   }
 
   const darkTheme = {
@@ -422,8 +522,8 @@ export default function App() {
                       <strong className="account-points">{points} 点</strong>
                     </div>
                     <div className="account-divider" />
-                    <Button icon={<ShoppingOutlined />} block style={{ marginBottom: 8 }} onClick={() => setShowPricing(true)}>购买点数</Button>
-                    <Button icon={<LogoutOutlined />} block danger onClick={handleLogout}>退出登录</Button>
+                    <Button icon={<ShoppingOutlined />} block className="account-action account-buy" onClick={() => setShowPricing(true)}>购买点数</Button>
+                    <Button icon={<LogoutOutlined />} block className="account-action account-logout" onClick={handleLogout}>退出登录</Button>
                   </div>
                 }
                 title={<div className="account-title"><UserOutlined style={{ marginRight: 6 }} />{phoneDisplay}</div>}
@@ -434,6 +534,71 @@ export default function App() {
               </Popover>
             </Space>
           </header>
+
+          <Tabs
+            className="workspace-tabs"
+            defaultActiveKey="paste"
+            items={[
+              {
+                key: "paste",
+                label: "上传图片贴图",
+                children: (
+          <section className="paste-module" aria-label="直接贴图生成模块">
+            <Card className="paste-control-panel" variant="borderless">
+              <Text className="rail-label">Direct paste</Text>
+              <Flex className="panel-heading" align="center" justify="space-between" gap={10}>
+                <Flex align="center" gap={10}>
+                  <PictureOutlined />
+                  <Title level={2}>上传图片直接贴图</Title>
+                </Flex>
+                <Tag color="gold">消耗 {directPasteCost} 点</Tag>
+              </Flex>
+
+              <div className="paste-upload-grid">
+                <label className="upload-box paste-upload-box">
+                  <input aria-label="上传产品图" type="file" accept="image/*" onChange={handlePasteProductUpload} />
+                  {pasteProductImageUrl ? (
+                    <img src={pasteProductImageUrl} alt="待贴图产品预览" />
+                  ) : (
+                    <Space orientation="vertical" align="center">
+                      <UploadOutlined />
+                      <Text>上传产品图</Text>
+                    </Space>
+                  )}
+                </label>
+                <label className="upload-box paste-upload-box">
+                  <input aria-label="上传贴图图片" type="file" accept="image/*" onChange={handlePastePatternUpload} />
+                  {pastePatternImageUrl ? (
+                    <img src={pastePatternImageUrl} alt="贴图图片预览" />
+                  ) : (
+                    <Space orientation="vertical" align="center">
+                      <UploadOutlined />
+                      <Text>上传贴图图片</Text>
+                    </Space>
+                  )}
+                </label>
+              </div>
+
+              <Space orientation="vertical" size={12} className="form-stack">
+                <div className="field"><span>生成模型</span><Select aria-label="直接贴图生成模型" value={model} onChange={(v) => setModel(v)} options={DOUBAO_MODEL_OPTIONS} /></div>
+                {pasteError ? <Alert type="error" title={pasteError} showIcon closable onClose={() => setPasteError("")} /> : null}
+                {pasteNotice ? <Alert type="warning" title={pasteNotice} showIcon closable onClose={() => setPasteNotice("")} /> : null}
+                <Button block className="generate-button" disabled={!canDirectPaste} icon={<PictureOutlined />} loading={isPasting} onClick={handleDirectPaste} type="primary">
+                  {points < directPasteCost ? "点数不足" : "生成贴图产品图"}
+                </Button>
+              </Space>
+            </Card>
+
+            <ResultColumn title="贴图结果" subtitle="产品图与上传图片直接合成的成品图" emptyText="上传两张图片后将在这里显示贴图产品图"
+              isGenerating={isPasting} onPreview={setPreviewImage}
+              results={pasteResult ? [{ id: pasteResult.id, title: pasteResult.title, imageUrl: pasteResult.imageUrl }] : []} />
+          </section>
+                )
+              },
+              {
+                key: "prompt",
+                label: "提示词生成",
+                children: (
 
           <section className="workbench" aria-label="产品图片生成工作台">
             <Card className="control-panel" variant="borderless">
@@ -474,6 +639,10 @@ export default function App() {
               isGenerating={isGenerating} onPreview={setPreviewImage}
               results={results.map((i) => ({ id: `${i.id}-product`, title: i.productTitle, imageUrl: i.productImageUrl, overlayImageUrl: i.productOverlayImageUrl }))} />
           </section>
+                )
+              }
+            ]}
+          />
           <Modal centered footer={null} onCancel={() => setPreviewImage(null)} open={Boolean(previewImage)} title={previewImage?.title} width="min(92vw, 960px)">
             {previewImage ? <img className="preview-image" src={previewImage.imageUrl} alt={previewImage.title} /> : null}
           </Modal>

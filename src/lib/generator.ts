@@ -25,6 +25,14 @@ export type GenerationPair = {
   size: ImageSize;
 };
 
+export type DirectPasteResult = {
+  id: string;
+  title: string;
+  imageUrl: string;
+  productImageUrl: string;
+  patternImageUrl: string;
+};
+
 const sizeToViewBox: Record<ImageSize, { width: number; height: number }> = {
   "1:1": { width: 900, height: 900 },
   "4:3": { width: 960, height: 720 },
@@ -57,6 +65,62 @@ export function createGenerationBatch(request: GenerationRequest): GenerationPai
       size: request.size
     };
   });
+}
+
+export function calculateDirectPasteCost() {
+  return 1;
+}
+
+export function createDirectPastePreview(productImageUrl: string, patternImageUrl: string): DirectPasteResult {
+  return {
+    id: `direct-paste-${Date.now()}`,
+    title: "贴图产品图",
+    imageUrl: createDirectPasteSvg(productImageUrl, patternImageUrl),
+    productImageUrl,
+    patternImageUrl
+  };
+}
+
+function createDirectPasteSvg(productImageUrl: string, patternImageUrl: string) {
+  const width = 1024;
+  const height = 1024;
+  const pasteX = 268;
+  const pasteY = 176;
+  const pasteWidth = 488;
+  const pasteHeight = 672;
+
+  return svgDataUri(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
+      <defs>
+        <clipPath id="pasteArea">
+          <rect x="${pasteX}" y="${pasteY}" width="${pasteWidth}" height="${pasteHeight}" rx="34" />
+        </clipPath>
+        <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.34" />
+        </filter>
+        <linearGradient id="surfaceLight" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0.26" />
+          <stop offset="0.42" stop-color="#ffffff" stop-opacity="0.06" />
+          <stop offset="1" stop-color="#000000" stop-opacity="0.18" />
+        </linearGradient>
+      </defs>
+      <rect width="${width}" height="${height}" fill="#111213" />
+      <image href="${escapeXml(productImageUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet" />
+      <g filter="url(#softShadow)">
+        <rect x="${pasteX}" y="${pasteY}" width="${pasteWidth}" height="${pasteHeight}" rx="34" fill="#000000" opacity="0.18" />
+        <g clip-path="url(#pasteArea)">
+          <image href="${escapeXml(patternImageUrl)}" x="${pasteX}" y="${pasteY}" width="${pasteWidth}" height="${pasteHeight}" preserveAspectRatio="xMidYMid slice" opacity="0.92" />
+          <rect x="${pasteX}" y="${pasteY}" width="${pasteWidth}" height="${pasteHeight}" fill="url(#surfaceLight)" />
+          <g opacity="0.11">
+            <path d="M${pasteX + 88} ${pasteY} C ${pasteX + 62} ${pasteY + 180}, ${pasteX + 116} ${pasteY + 420}, ${pasteX + 78} ${pasteY + pasteHeight}" fill="none" stroke="#000" stroke-width="16" />
+            <path d="M${pasteX + 252} ${pasteY} C ${pasteX + 278} ${pasteY + 210}, ${pasteX + 224} ${pasteY + 430}, ${pasteX + 268} ${pasteY + pasteHeight}" fill="none" stroke="#fff" stroke-width="10" />
+            <path d="M${pasteX + 402} ${pasteY} C ${pasteX + 374} ${pasteY + 190}, ${pasteX + 428} ${pasteY + 442}, ${pasteX + 396} ${pasteY + pasteHeight}" fill="none" stroke="#000" stroke-width="14" />
+          </g>
+        </g>
+        <rect x="${pasteX}" y="${pasteY}" width="${pasteWidth}" height="${pasteHeight}" rx="34" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="3" />
+      </g>
+    </svg>
+  `);
 }
 
 function createPromptImage(prompt: string, size: ImageSize, index: number) {
