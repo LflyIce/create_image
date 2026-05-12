@@ -78,6 +78,22 @@ function apiUrl(path: string) {
 function getToken(): string { return localStorage.getItem("pod_token") || ""; }
 function setToken(token: string) { localStorage.setItem("pod_token", token); }
 function clearToken() { localStorage.removeItem("pod_token"); }
+
+function safeDownloadName(name: string) {
+  return name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "image";
+}
+
+function downloadImages(items: Array<{ title: string; imageUrl: string }>) {
+  items.forEach((item, index) => {
+    const link = document.createElement("a");
+    link.href = item.imageUrl;
+    link.download = `${String(index + 1).padStart(2, "0")}-${safeDownloadName(item.title)}.png`;
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
+}
 async function api<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {
@@ -719,10 +735,30 @@ type ResultColumnProps = {
 };
 
 function ResultColumn({ title, subtitle, emptyText, isGenerating, onPreview, results }: ResultColumnProps) {
+  const downloadableResults = results.map((item) => ({
+    title: item.title,
+    imageUrl: item.overlayImageUrl ?? item.imageUrl
+  }));
+
   return (
     <Card className="result-column" variant="borderless">
       <Text className="rail-label">Output bay</Text>
-      <div className="column-title"><Title level={2}>{title}</Title><Text type="secondary">{subtitle}</Text></div>
+      <div className="column-title">
+        <div>
+          <Title level={2}>{title}</Title>
+          <Text type="secondary">{subtitle}</Text>
+        </div>
+        {downloadableResults.length > 1 ? (
+          <Button
+            aria-label={`下载全部 ${title}`}
+            icon={<DownloadOutlined />}
+            onClick={() => downloadImages(downloadableResults)}
+            size="small"
+          >
+            下载全部
+          </Button>
+        ) : null}
+      </div>
       {isGenerating ? (<div className="loading-state"><Spin size="large" /><Text>正在生成...</Text></div>) : null}
       {!isGenerating && results.length === 0 ? (<Empty className="empty-state" image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />) : null}
       <div className="result-grid">

@@ -112,6 +112,90 @@ describe("doubao image generation", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).prompt).toContain("只替换上传图片中的产品主体");
   });
 
+  it("starts style image requests for multiple pairs in parallel", async () => {
+    const pendingStyleResponses: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      if (!body.image) {
+        return new Promise<Response>((resolve) => pendingStyleResponses.push(resolve));
+      }
+
+      const productIndex = fetchMock.mock.calls.filter(([, requestInit]) => {
+        const requestBody = JSON.parse(String(requestInit?.body));
+        return Boolean(requestBody.image);
+      }).length;
+
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ data: [{ url: `https://example.com/product-${productIndex}.png` }] })
+      } as Response);
+    });
+
+    const batchPromise = createDoubaoGenerationBatch(
+      {
+        prompt: "parallel pattern",
+        size: "1:1",
+        count: 2,
+        sampleImageUrl: "data:image/png;base64,sample"
+      },
+      fetchMock
+    );
+
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).image)).toEqual([undefined, undefined]);
+
+    pendingStyleResponses.forEach((resolve, index) => {
+      resolve({
+        ok: true,
+        json: async () => ({ data: [{ url: `https://example.com/style-${index + 1}.png` }] })
+      } as Response);
+    });
+
+    const results = await batchPromise;
+
+    expect(results).toHaveLength(2);
+    expect(results.map((result) => result.promptImageUrl)).toEqual([
+      "https://example.com/style-1.png",
+      "https://example.com/style-2.png"
+    ]);
+  });
+
+  it("adds distinct variation guidance when generating multiple pairs", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      const url = body.image ? "https://example.com/product.png" : "https://example.com/style.png";
+
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ data: [{ url }] })
+      } as Response);
+    });
+
+    await createDoubaoGenerationBatch(
+      {
+        prompt: "blue floral curtain pattern",
+        size: "1:1",
+        count: 3,
+        sampleImageUrl: "data:image/png;base64,sample"
+      },
+      fetchMock
+    );
+
+    const stylePrompts = fetchMock.mock.calls
+      .map(([, init]) => JSON.parse(String(init?.body)))
+      .filter((body) => !body.image)
+      .map((body) => body.prompt);
+
+    expect(stylePrompts).toHaveLength(3);
+    expect(new Set(stylePrompts).size).toBe(3);
+    stylePrompts.forEach((prompt) => {
+      expect(prompt).toContain("blue floral curtain pattern");
+      expect(prompt).toContain("变化方案");
+    });
+  });
+
   it("builds and sends direct product paste requests with two uploaded images", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,

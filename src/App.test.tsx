@@ -98,4 +98,26 @@ describe("App workbench", () => {
     expect(screen.queryByText("产品图 1")).not.toBeInTheDocument();
     expect(screen.queryByText("已贴膜")).not.toBeInTheDocument();
   });
+
+  it("downloads all images in a result column with one action", async () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openPromptGenerationTab(user);
+    const file = new File(["sample"], "sample.png", { type: "image/png" });
+    await user.upload(await screen.findByLabelText("上传示例图片"), file);
+    await user.type(screen.getByLabelText("提示词"), "green texture");
+    await selectGenerationCount(user, "2");
+    await user.click(screen.getByRole("button", { name: /开始生成/ }));
+
+    await waitFor(() => {
+      expect(document.querySelectorAll("a[download]")).toHaveLength(4);
+    });
+
+    const downloadAllButtons = await screen.findAllByRole("button", { name: /下载全部/ });
+    await user.click(downloadAllButtons[0]);
+
+    expect(clickSpy).toHaveBeenCalledTimes(2);
+  });
 });

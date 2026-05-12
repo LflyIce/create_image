@@ -18,6 +18,19 @@ export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promis
 export const DEFAULT_IMAGE_QUALITY_PROMPT =
   "一张构图严谨、主体突出的高清晰度画面，展现出丰富细腻的纹理细节和明确的视觉焦点。明亮均匀的漫射光线充满整个空间，色彩鲜艳饱满，确保画面各处都清晰可见且层次分明。影像风格强调极致的锐度与通透感，背景处理干净简洁，进一步衬托出主体的真实质感。整体呈现出专业摄影级的精细画质，营造出一种清晰、明净且令人愉悦的视觉氛围";
 
+const DOUBAO_VARIATION_GUIDES = [
+  "变化方案 1：严格围绕原提示词主题，突出清晰主图形和更疏朗的纹理留白，让整体节奏更简洁。",
+  "变化方案 2：严格围绕原提示词主题，增加细节密度、层次变化和局部装饰元素，让画面更丰富。",
+  "变化方案 3：严格围绕原提示词主题，调整色彩比例、明暗层次和图案分布，让视觉重心明显不同。",
+  "变化方案 4：严格围绕原提示词主题，改变重复节奏、边缘走势和元素大小关系，让图案结构区别于其他方案。"
+];
+
+function buildDoubaoVariationGuide(index: number, total: number) {
+  if (total <= 1) return "";
+  const guide = DOUBAO_VARIATION_GUIDES[index % DOUBAO_VARIATION_GUIDES.length];
+  return `${guide} 生成内容必须符合用户原始提示词，不要偏离主题；同一批次内避免与其他图片在构图、纹理分布和色彩比例上过于相似。`;
+}
+
 export function buildDoubaoRequestBody(prompt: string, model: DoubaoModel, image?: string | string[]): DoubaoRequestBody {
   const body: DoubaoRequestBody = {
     model,
@@ -144,33 +157,34 @@ export async function generateDoubaoImage(prompt: string, model: DoubaoModel, fe
 
 export async function createDoubaoGenerationBatch(request: GenerationRequest, fetcher: FetchLike = fetch) {
   const model = request.model && isDoubaoModel(request.model) ? request.model : "doubao-seedream-5-0-260128";
-  const pairs: GenerationPair[] = [];
-
-  for (let index = 0; index < request.count; index += 1) {
+  const pairRequests = Array.from({ length: request.count }, async (_, index): Promise<GenerationPair> => {
+    const variationGuide = buildDoubaoVariationGuide(index, request.count);
+    const stylePrompt = [buildDoubaoPrompt(request.prompt, "style", request.size), variationGuide].filter(Boolean).join("\n");
     const promptImageUrl = await generateDoubaoImage(
-      buildDoubaoPrompt(request.prompt, "style", request.size),
+      stylePrompt,
       model,
       fetcher
       // 风格图不传产品原图，纯按提示词生成，避免被产品图干扰
     );
+    const productPrompt = [buildDoubaoPrompt(request.prompt, "product", request.size), variationGuide].filter(Boolean).join("\n");
     const productImageUrl = await generateDoubaoImage(
-      buildDoubaoPrompt(request.prompt, "product", request.size),
+      productPrompt,
       model,
       fetcher,
       [request.sampleImageUrl, promptImageUrl]
     );
 
-    pairs.push({
+    return {
       id: `doubao-${request.size.replace(":", "-")}-${index}`,
       promptTitle: `风格图 ${index + 1}`,
       productTitle: `产品图 ${index + 1}`,
       promptImageUrl,
       productImageUrl,
       size: request.size
-    });
-  }
+    };
+  });
 
-  return pairs;
+  return Promise.all(pairRequests);
 }
 
 export async function createDoubaoDirectPaste(

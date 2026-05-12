@@ -450,7 +450,15 @@ body {
 }
 
 .column-title {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
   margin-bottom: 16px;
+}
+
+.column-title .ant-btn {
+  flex: 0 0 auto;
 }
 
 .column-title .ant-typography-secondary {
